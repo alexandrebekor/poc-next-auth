@@ -1,31 +1,70 @@
-import { signInRequest } from "@/services/auth"
+import { NextAuthOptions } from "next-auth"
 import NextAuth from "next-auth/next"
-import Credentials from "next-auth/providers/credentials"
+import CredentialsProvider from "next-auth/providers/credentials"
 
-export default NextAuth({
+export const authOptions: NextAuthOptions = {
   providers: [
-    Credentials({
+    CredentialsProvider({
       id: 'credentials',
       name: 'poc-next-auth',
       credentials: {
-        email: { label: 'email', type: 'email'},
+        identifier: { label: 'identifier', type: 'email'},
         password: {label: 'password', type: 'password'}
       },
       async authorize(credentials, req) {
-          const token = await signInRequest()
-          console.log(token)
+          const response = await fetch(`${process.env.HOST_API}/api/auth/local`, {
+            method: 'POST',
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(credentials)
+          })
+          
+          const data = await response.json()
   
-          if(token) {
-            return token
+          if(!response.ok) {
+            throw new Error(data.error.message)
+          }
+
+          if(response.ok && data) {
+            return {
+              id: data.user.id,
+              email: data.user.email,
+              name: 'Alexandre Bekor',
+              image: 'https://github.com/alexandrebekor.png',
+              token: data.jwt
+            }
           }
   
           return null
       },
     })
   ],
+  session: {
+    strategy: 'jwt'
+  },
+  callbacks: {
+    async jwt({ token, user, account }) {
+      if(user && account) {
+        return {
+          ...token,
+          accessToken: user.token
+        }
+      }
 
-  secret: process.env.NEXT_AUTH_TOKEN,
+
+      return token
+    },
+    async session({ session, token }) {
+      session.user.token = token.accessToken
+      return session
+    },
+  },
+
+  secret: process.env.NEXTAUTH_SECRET,
   pages: {
-    signIn: '/login'
+    signIn: '/'
   }
-})
+}
+
+export default NextAuth(authOptions)
